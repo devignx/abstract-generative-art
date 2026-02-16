@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Abstract Visual Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; overflow: hidden; font-family: 'Courier New', monospace; color: #c8c8d0; }
+  canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+
+  #panel {
+    position: fixed; top: 0; right: 0; width: 280px; height: 100vh;
+    background: rgba(10,10,18,0.92); backdrop-filter: blur(12px);
+    border-left: 1px solid rgba(255,255,255,0.06);
+    z-index: 10; overflow-y: auto; padding: 16px;
+    transition: transform 0.3s ease;
+    scrollbar-width: thin; scrollbar-color: #333 transparent;
+  }
+  #panel.hidden { transform: translateX(100%); }
+  #panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: #6a6aff; margin: 18px 0 10px; }
+  #panel h2:first-child { margin-top: 4px; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; font-size: 11px; }
+  .row label { color: #888; flex-shrink: 0; }
+  .row input[type=range] { width: 120px; accent-color: #6a6aff; }
+  .row .val { width: 32px; text-align: right; color: #aaa; font-size: 10px; }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  .btn {
+    padding: 5px 10px; font-size: 10px; font-family: inherit;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    color: #aaa; cursor: pointer; border-radius: 3px; transition: all 0.15s;
+  }
+  .btn:hover { background: rgba(106,106,255,0.15); color: #fff; border-color: #6a6aff; }
+  .btn.active { background: rgba(106,106,255,0.25); color: #fff; border-color: #6a6aff; }
+
+  #toggle-panel {
+    position: fixed; top: 12px; right: 12px; z-index: 20;
+    background: rgba(10,10,18,0.8); border: 1px solid rgba(255,255,255,0.1);
+    color: #6a6aff; font-family: inherit; font-size: 18px;
+    width: 32px; height: 32px; cursor: pointer; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #info {
+    position: fixed; bottom: 12px; left: 12px; z-index: 10;
+    font-size: 10px; color: #444; line-height: 1.6;
+  }
+
+  select {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    color: #ccc; font-family: inherit; font-size: 11px; padding: 4px 6px;
+    border-radius: 3px; width: 100%;
+  }
+  select option { background: #141420; }
+
+  .color-row { display: flex; gap: 4px; margin: 6px 0; }
+  .color-row input[type=color] { width: 32px; height: 24px; border: none; background: none; cursor: pointer; }
+
+  .separator { border-top: 1px solid rgba(255,255,255,0.05); margin: 12px 0; }
+
+  .fav-list { max-height: 180px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #333 transparent; }
+  .fav-item {
+    display: flex; align-items: center; gap: 4px; padding: 4px 6px; margin: 2px 0;
+    background: rgba(255,255,255,0.03); border-radius: 3px; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s;
+  }
+  .fav-item:hover { background: rgba(106,106,255,0.1); border-color: rgba(106,106,255,0.3); }
+  .fav-item .fav-name { flex: 1; font-size: 10px; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fav-item .fav-tags { font-size: 8px; color: #666; margin-left: 2px; }
+  .fav-item .fav-del {
+    font-size: 10px; color: #555; cursor: pointer; padding: 0 4px; border: none;
+    background: none; font-family: inherit;
+  }
+  .fav-item .fav-del:hover { color: #f44; }
+
+  body.zen #panel, body.zen #toggle-panel, body.zen #info { display: none !important; }
+  body.zen { cursor: none; }
+</style>
+</head>
+<body>
+
+<button id="toggle-panel" onclick="document.getElementById('panel').classList.toggle('hidden')">&#9776;</button>
+
+<div id="panel">
+  <h2>Mode</h2>
+  <div class="btn-row" id="mode-btns"></div>
+
+  <h2>Shape</h2>
+  <div class="btn-row" id="shape-btns"></div>
+
+  <h2>Palette</h2>
+  <select id="palette-sel"></select>
+  <div class="color-row" style="margin-top:8px">
+    <label style="font-size:11px;color:#888;margin-right:4px">Custom:</label>
+    <input type="color" id="c1" value="#6a00ff">
+    <input type="color" id="c2" value="#ff006a">
+    <input type="color" id="c3" value="#00ffa5">
+    <input type="color" id="c4" value="#ffaa00">
+  </div>
+
+  <h2>Parameters</h2>
+  <div class="row"><label>Speed</label><input type="range" id="r-speed" min="0.1" max="5" step="0.1" value="1"><span class="val" id="v-speed">1</span></div>
+  <div class="row"><label>Count</label><input type="range" id="r-count" min="1" max="500" step="1" value="120"><span class="val" id="v-count">120</span></div>
+  <div class="row"><label>Size</label><input type="range" id="r-size" min="1" max="100" step="1" value="20"><span class="val" id="v-size">20</span></div>
+  <div class="row"><label>Complexity</label><input type="range" id="r-complexity" min="1" max="20" step="1" value="6"><span class="val" id="v-complexity">6</span></div>
+  <div class="row"><label>Noise Scale</label><input type="range" id="r-noise" min="0.001" max="0.02" step="0.001" value="0.005"><span class="val" id="v-noise">.005</span></div>
+  <div class="row"><label>Decay/Trail</label><input type="range" id="r-decay" min="0" max="50" step="1" value="15"><span class="val" id="v-decay">15</span></div>
+  <div class="row"><label>Symmetry</label><input type="range" id="r-symmetry" min="1" max="12" step="1" value="1"><span class="val" id="v-symmetry">1</span></div>
+  <div class="row"><label>Gravity X</label><input type="range" id="r-gx" min="-1" max="1" step="0.01" value="0"><span class="val" id="v-gx">0</span></div>
+  <div class="row"><label>Gravity Y</label><input type="range" id="r-gy" min="-1" max="1" step="0.01" value="0"><span class="val" id="v-gy">0</span></div>
+
+  <div class="separator"></div>
+  <h2>Effects</h2>
+  <div class="btn-row">
+    <button class="btn" id="fx-glow" onclick="toggleFx('glow')">Glow</button>
+    <button class="btn" id="fx-mirror" onclick="toggleFx('mirror')">Mirror</button>
+    <button class="btn" id="fx-pulse" onclick="toggleFx('pulse')">Pulse</button>
+    <button class="btn" id="fx-chromatic" onclick="toggleFx('chromatic')">Chromatic</button>
+    <button class="btn" id="fx-invert" onclick="toggleFx('invert')">Invert</button>
+  </div>
+
+  <h2>Blend Mode</h2>
+  <select id="blend-sel">
+    <option value="0">Normal</option>
+    <option value="1" selected>Add</option>
+    <option value="2">Screen</option>
+    <option value="3">Multiply</option>
+    <option value="4">Lightest</option>
+    <option value="5">Difference</option>
+  </select>
+
+  <div class="separator"></div>
+  <h2>Interaction</h2>
+  <div class="btn-row">
+    <button class="btn" id="fx-hoverrand" onclick="toggleHoverRandomize()">Hover Randomize</button>
+    <button class="btn" id="fx-hovertweak" onclick="toggleHoverTweak()">Hover Tweak</button>
+    <button class="btn" id="fx-beatreactive" onclick="toggleBeatReactive()">Beat Reactive</button>
+    <button class="btn" id="fx-mouseattract" onclick="toggleMouseAttract()">Mouse Attract</button>
+  </div>
+  <div class="row"><label>Hover Speed</label><input type="range" id="r-hoverspeed" min="100" max="1500" step="50" value="300"><span class="val" id="v-hoverspeed">300</span></div>
+  <div class="row"><label>Attract Force</label><input type="range" id="r-attractstr" min="0.05" max="2" step="0.05" value="0.5"><span class="val" id="v-attractstr">0.5</span></div>
+  <div class="row"><label>Offset %</label><input type="range" id="r-offset" min="1" max="100" step="1" value="30"><span class="val" id="v-offset">30</span></div>
+
+  <div class="separator"></div>
+  <h2>Favorites</h2>
+  <div class="btn-row">
+    <button class="btn" onclick="saveFavorite()">Save Current</button>
+  </div>
+  <div class="fav-list" id="fav-list"></div>
+
+  <div class="separator"></div>
+  <h2>Actions</h2>
+  <div class="btn-row">
+    <button class="btn" onclick="clearCanvas()">Clear</button>
+    <button class="btn" onclick="pauseToggle()">Pause</button>
+    <button class="btn" onclick="randomize()">Randomize</button>
+    <button class="btn" onclick="saveCanvas('abstract_' + Date.now(), 'png')">Save PNG</button>
+    <button class="btn" onclick="toggleRecord()">Record</button>
+    <button class="btn" onclick="toggleZenMode()">Zen Mode</button>
+  </div>
+</div>
+
+<div id="info">
+  [H] panel &middot; [Space] pause &middot; [R] randomize &middot; [C] clear &middot; [S] save &middot; [M] hover rand &middot; [N] tweak &middot; [B] beat &middot; [A] attract &middot; [F] fav &middot; [Z] zen<br>
+  [1-9] load favorites &middot; Scroll to zoom &middot; Zen: fullscreen, no UI, press Esc to exit
+</div>
+
+<script>
+// === CONFIG ===
+const MODES = ['flowfield', 'attractor', 'wave', 'spiral', 'fractal', 'swarm', 'constellation', 'kaleidoscope'];
+const SHAPES = ['circle', 'line', 'triangle', 'rect', 'point', 'arc', 'star', 'organic'];
+const PALETTES = {
+  'Neon Void':    ['#6a00ff','#ff006a','#00ffa5','#ffaa00'],
+  'Ice':          ['#00c6ff','#0072ff','#a0e9ff','#ffffff'],
+  'Lava':         ['#ff0000','#ff6600','#ffcc00','#ff3399'],
+  'Midnight':     ['#1a0033','#4400aa','#7722ff','#cc88ff'],
+  'Pastel Dream': ['#ffadad','#ffd6a5','#caffbf','#a0c4ff'],
+  'Monochrome':   ['#ffffff','#aaaaaa','#555555','#222222'],
+  'Sunset':       ['#ff5e62','#ff9966','#ffde59','#ff85a1'],
+  'Cyberpunk':    ['#f72585','#7209b7','#3a0ca3','#4cc9f0'],
+  'Forest':       ['#2d6a4f','#40916c','#52b788','#95d5b2'],
+  'Custom':       [],
+};
+
+let cfg = {
+  mode: 'flowfield', shape: 'circle',
+  speed: 1, count: 120, size: 20, complexity: 6,
+  noiseScale: 0.005, decay: 15, symmetry: 1,
+  gx: 0, gy: 0,
+  palette: 'Neon Void',
+  fx: { glow: false, mirror: false, pulse: false, chromatic: false, invert: false },
+  blendMode: 1,
+  paused: false, recording: false, zoom: 1,
+  hoverRandomize: false,
+  hoverTweak: false,
+  beatReactive: false,
+  mouseAttract: false,
+  attractStrength: 0.5,
+  offset: 30, // % range for constrained randomization
+};
+
+let particles = [];
+let attractors = [];
+let t = 0;
+let recorder = null;
+let chunks = [];
+let lastHoverRandomize = 0;
+let lastMouseX = -1, lastMouseY = -1;
+let hoverCooldown = 300; // ms between randomizations
+let favorites = [];
+let zenMode = false;
+
+// audio / beat reactive
+let audioContext = null;
+let analyser = null;
+let freqData = null;
+let timeData = null;
+let micStream = null;
+let beatEnergy = 0;
+let beatEnergySmooth = 0;
+let beatThreshold = 0;
+let beatDetected = false;
+let lastBeatTime = 0;
+let beatCount = 0;
+
+// === PARTICLES ===
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.pos = createVector(random(width), random(height));
+    this.vel = p5.Vector.random2D().mult(random(0.5, 2));
+    this.acc = createVector(0, 0);
+    this.life = random(100, 400);
+    this.maxLife = this.life;
+    this.hueOff = random(100);
+    this.sizeOff = random(0.5, 1.5);
+    this.angle = random(TWO_PI);
+    this.phase = random(TWO_PI);
+  }
+  update() {
+    let spd = cfg.speed;
+    let ns = cfg.noiseScale;
+
+    switch (cfg.mode) {
+      case 'flowfield': {
+        let angle = noise(this.pos.x * ns, this.pos.y * ns, t * 0.3) * TWO_PI * cfg.complexity;
+        this.acc = p5.Vector.fromAngle(angle).mult(0.3 * spd);
+        break;
+      }
+      case 'attractor': {
+        this.acc.set(0, 0);
+        for (let a of attractors) {
+          let d = p5.Vector.sub(a, this.pos);
+          let dist = max(d.mag(), 20);
+          d.normalize().mult(200 / (dist) * spd);
+          this.acc.add(d);
+        }
+        if (attractors.length === 0) {
+          let cx = width / 2, cy = height / 2;
+          let d = createVector(cx - this.pos.x, cy - this.pos.y);
+          let dist = max(d.mag(), 20);
+          d.normalize().mult(100 / dist * spd);
+          let perp = createVector(-d.y, d.x).mult(0.5);
+          this.acc.add(d).add(perp);
+        }
+        break;
+      }
+      case 'wave': {
+        let freq = cfg.complexity * 0.5;
+        let ax = sin(this.pos.y * 0.01 * freq + t) * spd;
+        let ay = cos(this.pos.x * 0.01 * freq + t) * spd;
+        this.acc.set(ax, ay);
+        break;
+      }
+      case 'spiral': {
+        let cx = width / 2, cy = height / 2;
+        let dx = this.pos.x - cx, dy = this.pos.y - cy;
+        let dist = sqrt(dx * dx + dy * dy);
+        let a = atan2(dy, dx) + 0.05 * spd;
+        let r = dist + sin(t + this.phase) * 2;
+        this.acc.set(cos(a) * r * 0.001 - dx * 0.001, sin(a) * r * 0.001 - dy * 0.001);
+        this.acc.mult(spd * cfg.complexity * 0.3);
+        break;
+      }
+      case 'fractal': {
+        let scale = ns * 50;
+        let n1 = noise(this.pos.x * scale, this.pos.y * scale, t * 0.2);
+        let n2 = noise(this.pos.x * scale + 100, this.pos.y * scale + 100, t * 0.2 + 50);
+        let a1 = n1 * TWO_PI * cfg.complexity;
+        let a2 = n2 * TWO_PI * cfg.complexity;
+        this.acc.set(cos(a1) * sin(a2), sin(a1) * cos(a2)).mult(spd * 0.5);
+        break;
+      }
+      case 'swarm': {
+        let target = createVector(mouseX || width/2, mouseY || height/2);
+        let d = p5.Vector.sub(target, this.pos);
+        let dist = max(d.mag(), 10);
+        d.normalize().mult(spd * 2);
+        let wander = p5.Vector.fromAngle(noise(this.pos.x*ns, this.pos.y*ns, t*0.5) * TWO_PI * 4).mult(spd);
+        this.acc = p5.Vector.add(d, wander).mult(0.3);
+        break;
+      }
+      case 'constellation': {
+        let angle = noise(this.pos.x * ns * 2, t * 0.1) * PI * cfg.complexity;
+        this.acc = p5.Vector.fromAngle(angle).mult(0.1 * spd);
+        this.vel.mult(0.95);
+        break;
+      }
+      case 'kaleidoscope': {
+        let cx = width/2, cy = height/2;
+        let a = atan2(this.pos.y - cy, this.pos.x - cx);
+        let dist = p5.Vector.dist(this.pos, createVector(cx, cy));
+        let na = a + sin(t * spd + dist * 0.01) * cfg.complexity * 0.1;
+        this.acc.set(cos(na) * 0.5, sin(na) * 0.5).mult(spd);
+        break;
+      }
+    }
+
+    this.acc.add(createVector(cfg.gx, cfg.gy));
+
+    // mouse attraction
+    if (cfg.mouseAttract && mouseX > 0 && mouseY > 0) {
+      let toMouse = createVector(mouseX - this.pos.x, mouseY - this.pos.y);
+      let d = max(toMouse.mag(), 30);
+      toMouse.normalize().mult(cfg.attractStrength * 300 / d);
+      this.acc.add(toMouse);
+    }
+
+    this.vel.add(this.acc);
+    this.vel.limit(4 * cfg.speed);
+    this.pos.add(this.vel);
+    this.life--;
+    this.angle += 0.02 * cfg.speed;
+
+    if (this.life <= 0 || this.pos.x < -50 || this.pos.x > width+50 || this.pos.y < -50 || this.pos.y > height+50) {
+      this.reset();
+    }
+  }
+  display() {
+    let cols = getCurrentPalette();
+    let ci = floor(this.hueOff * cols.length) % cols.length;
+    let c = color(cols[ci]);
+    let alpha = map(this.life, 0, this.maxLife, 0, 200);
+    let pulseMult = cfg.fx.pulse ? map(sin(t * 3 + this.phase), -1, 1, 0.5, 1.5) : 1;
+    let sz = cfg.size * this.sizeOff * pulseMult * (0.3 + 0.7 * alpha / 200);
+
+    c.setAlpha(alpha);
+
+    if (cfg.fx.chromatic) {
+      let offset = 3;
+      let c1 = color(red(c) + 40, green(c), blue(c), alpha * 0.5);
+      let c2 = color(red(c), green(c), blue(c) + 40, alpha * 0.5);
+      drawShape(this.pos.x - offset, this.pos.y, sz * 0.95, c1, this.angle);
+      drawShape(this.pos.x + offset, this.pos.y, sz * 0.95, c2, this.angle);
+    }
+
+    drawShape(this.pos.x, this.pos.y, sz, c, this.angle);
+  }
+}
+
+function drawShape(x, y, sz, c, angle) {
+  push();
+  translate(x, y);
+  rotate(angle);
+  noStroke();
+  fill(c);
+
+  switch (cfg.shape) {
+    case 'circle': ellipse(0, 0, sz, sz); break;
+    case 'line':
+      stroke(c); strokeWeight(max(1, sz * 0.15)); noFill();
+      line(-sz/2, 0, sz/2, 0);
+      break;
+    case 'triangle': triangle(0, -sz/2, -sz/2, sz/2, sz/2, sz/2); break;
+    case 'rect': rectMode(CENTER); rect(0, 0, sz, sz); break;
+    case 'point': strokeWeight(max(1, sz * 0.3)); stroke(c); point(0, 0); break;
+    case 'arc':
+      noFill(); stroke(c); strokeWeight(max(1, sz * 0.12));
+      arc(0, 0, sz, sz, 0, PI * 1.5);
+      break;
+    case 'star':
+      beginShape();
+      for (let i = 0; i < 5; i++) {
+        let a1 = map(i, 0, 5, 0, TWO_PI) - HALF_PI;
+        vertex(cos(a1) * sz * 0.5, sin(a1) * sz * 0.5);
+        let a2 = a1 + TWO_PI / 10;
+        vertex(cos(a2) * sz * 0.2, sin(a2) * sz * 0.2);
+      }
+      endShape(CLOSE);
+      break;
+    case 'organic':
+      beginShape();
+      for (let i = 0; i < 8; i++) {
+        let a = map(i, 0, 8, 0, TWO_PI);
+        let r = sz * 0.4 * (1 + 0.3 * sin(a * 3 + angle * 2));
+        vertex(cos(a) * r, sin(a) * r);
+      }
+      endShape(CLOSE);
+      break;
+  }
+  pop();
+}
+
+function getCurrentPalette() {
+  if (cfg.palette === 'Custom') {
+    return [
+      document.getElementById('c1').value,
+      document.getElementById('c2').value,
+      document.getElementById('c3').value,
+      document.getElementById('c4').value,
+    ];
+  }
+  return PALETTES[cfg.palette];
+}
+
+// === P5 ===
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  buildUI();
+  resetParticles();
+  attractors.push(createVector(width / 2, height / 2));
+  loadPersistedFavorites();
+}
+
+function draw() {
+  if (cfg.paused) return;
+
+  let blendModes = [BLEND, ADD, SCREEN, MULTIPLY, LIGHTEST, DIFFERENCE];
+  blendMode(BLEND);
+
+  let bg = cfg.fx.invert ? color(240) : color(10, 10, 15);
+  bg.setAlpha(map(cfg.decay, 0, 50, 255, 5));
+  fill(bg);
+  noStroke();
+  rect(0, 0, width, height);
+
+  blendMode(blendModes[cfg.blendMode]);
+
+  push();
+  translate(width / 2, height / 2);
+  scale(cfg.zoom);
+  translate(-width / 2, -height / 2);
+
+  for (let s = 0; s < cfg.symmetry; s++) {
+    push();
+    translate(width / 2, height / 2);
+    rotate((TWO_PI / cfg.symmetry) * s);
+    translate(-width / 2, -height / 2);
+
+    for (let p of particles) {
+      p.update();
+      p.display();
+
+      if (cfg.fx.mirror) {
+        push();
+        scale(-1, 1);
+        translate(-width, 0);
+        p.display();
+        pop();
+      }
+    }
+    pop();
+  }
+
+  // constellation lines
+  if (cfg.mode === 'constellation') {
+    let cols = getCurrentPalette();
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < min(i + 8, particles.length); j++) {
+        let d = p5.Vector.dist(particles[i].pos, particles[j].pos);
+        if (d < 100) {
+          let c = color(cols[i % cols.length]);
+          c.setAlpha(map(d, 0, 100, 80, 0));
+          stroke(c);
+          strokeWeight(0.5);
+          line(particles[i].pos.x, particles[i].pos.y, particles[j].pos.x, particles[j].pos.y);
+        }
+      }
+    }
+  }
+
+  pop();
+
+  // glow post-effect (simple overlay)
+  if (cfg.fx.glow) {
+    blendMode(ADD);
+    drawingContext.filter = 'blur(8px)';
+    drawingContext.globalAlpha = 0.12;
+    image(get(), 0, 0);
+    drawingContext.filter = 'none';
+    drawingContext.globalAlpha = 1;
+  }
+
+  blendMode(BLEND);
+
+  // mode indicator (minimal text only)
+  {
+    let labels = [];
+    if (cfg.hoverRandomize) labels.push('HOVER RANDOMIZE');
+    if (cfg.hoverTweak) labels.push('HOVER TWEAK [offset ' + cfg.offset + '%]');
+    if (cfg.beatReactive) labels.push('BEAT REACTIVE [offset ' + cfg.offset + '%]');
+    if (cfg.mouseAttract) labels.push('ATTRACT');
+    if (labels.length > 0) {
+      blendMode(BLEND);
+      push();
+      fill(cfg.mouseAttract && labels.length === 1 ? color(0,220,130,160) :
+           cfg.hoverRandomize ? color(106,106,255,160) :
+           cfg.hoverTweak ? color(255,160,40,160) :
+           cfg.beatReactive ? color(255,50,80,160) : color(0,220,130,160));
+      noStroke(); textSize(10); textFont('Courier New'); textAlign(LEFT, TOP);
+      text(labels.join('  +  '), 12, height - 30);
+      pop();
+    }
+  }
+
+  // beat reactive: analyse audio and drive params
+  if (cfg.beatReactive && analyser) {
+    analyser.getByteFrequencyData(freqData);
+    analyser.getByteTimeDomainData(timeData);
+
+    // frequency bands
+    let bins = freqData.length;
+    let bass = 0, mid = 0, high = 0;
+    let bassEnd = floor(bins * 0.1);
+    let midEnd = floor(bins * 0.4);
+    for (let i = 0; i < bins; i++) {
+      if (i < bassEnd) bass += freqData[i];
+      else if (i < midEnd) mid += freqData[i];
+      else high += freqData[i];
+    }
+    bass /= bassEnd; mid /= (midEnd - bassEnd); high /= (bins - midEnd);
+
+    // overall energy
+    beatEnergy = (bass * 2 + mid + high * 0.5) / 3.5;
+    beatEnergySmooth = beatEnergySmooth * 0.85 + beatEnergy * 0.15;
+    beatThreshold = beatEnergySmooth * 1.4 + 10;
+
+    // beat detection
+    let now = millis();
+    if (beatEnergy > beatThreshold && now - lastBeatTime > 150) {
+      beatDetected = true;
+      lastBeatTime = now;
+      beatCount++;
+    } else {
+      beatDetected = false;
+    }
+
+    // map audio to params (keep mode/shape/palette/fx), constrained by offset
+    let bNorm = constrain(bass / 255, 0, 1);
+    let mNorm = constrain(mid / 255, 0, 1);
+    let hNorm = constrain(high / 255, 0, 1);
+    let eNorm = constrain(beatEnergy / 200, 0, 1);
+    let pct = cfg.offset / 100;
+
+    // full-range target values
+    let tSpeed = lerp(0.3, 4, eNorm);
+    let tSize = lerp(5, 80, bNorm);
+    let tComplexity = floor(lerp(2, 16, mNorm));
+    let tNoise = lerp(0.002, 0.018, hNorm);
+    let tDecay = floor(lerp(3, 40, 1 - eNorm));
+    let tSym = beatDetected ? floor(lerp(1, 8, bNorm)) : cfg.symmetry;
+    let tGx = lerp(-0.3, 0.3, mNorm - 0.5);
+    let tGy = lerp(-0.3, 0.3, hNorm - 0.5);
+
+    // blend toward target by offset amount (pct=1 = full range, pct=0.1 = subtle)
+    cfg.speed = constrain(lerp(cfg.speed, tSpeed, pct), 0.1, 5);
+    cfg.size = constrain(lerp(cfg.size, tSize, pct), 1, 100);
+    cfg.complexity = constrain(floor(lerp(cfg.complexity, tComplexity, pct)), 1, 20);
+    cfg.noiseScale = constrain(lerp(cfg.noiseScale, tNoise, pct), 0.001, 0.02);
+    cfg.decay = constrain(floor(lerp(cfg.decay, tDecay, pct)), 0, 50);
+    cfg.symmetry = constrain(floor(lerp(cfg.symmetry, tSym, pct)), 1, 12);
+    cfg.gx = constrain(lerp(cfg.gx, tGx, pct), -1, 1);
+    cfg.gy = constrain(lerp(cfg.gy, tGy, pct), -1, 1);
+
+    syncUIFromCfg();
+  }
+
+  t += 0.01 * cfg.speed;
+}
+
+function resetParticles() {
+  particles = [];
+  for (let i = 0; i < cfg.count; i++) {
+    particles.push(new Particle());
+  }
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+function mousePressed() {
+  if (mouseX > width - 280 && !document.getElementById('panel').classList.contains('hidden')) return;
+  if (cfg.mode === 'attractor') {
+    attractors.push(createVector(mouseX, mouseY));
+    if (attractors.length > 5) attractors.shift();
+  }
+}
+
+function mouseMoved() {
+  if (!cfg.hoverRandomize && !cfg.hoverTweak) return;
+  // skip if over panel
+  if (mouseX > width - 280 && !document.getElementById('panel').classList.contains('hidden')) return;
+
+  let now = millis();
+  if (now - lastHoverRandomize < hoverCooldown) return;
+
+  // check if mouse actually moved enough (>8px)
+  let dx = mouseX - lastMouseX, dy = mouseY - lastMouseY;
+  if (sqrt(dx*dx + dy*dy) < 8) return;
+
+  lastMouseX = mouseX;
+  lastMouseY = mouseY;
+  lastHoverRandomize = now;
+
+  let xNorm = constrain(mouseX / width, 0, 1);
+  let yNorm = constrain(mouseY / height, 0, 1);
+
+  if (cfg.hoverRandomize) {
+    hoverRandomizeParams(xNorm, yNorm);
+  }
+  if (cfg.hoverTweak) {
+    hoverTweakParams(xNorm, yNorm);
+  }
+}
+
+function hoverRandomizeParams(xNorm, yNorm) {
+  let seed = noise(xNorm * 4, yNorm * 4, millis() * 0.0001);
+
+  cfg.mode = MODES[floor(xNorm * MODES.length) % MODES.length];
+  cfg.shape = SHAPES[floor(yNorm * SHAPES.length) % SHAPES.length];
+
+  let palKeys = Object.keys(PALETTES).filter(k => k !== 'Custom');
+  cfg.palette = palKeys[floor((xNorm + yNorm) * 0.5 * palKeys.length) % palKeys.length];
+
+  cfg.speed = lerp(0.3, 3.5, xNorm * 0.6 + seed * 0.4);
+  cfg.size = lerp(3, 70, yNorm * 0.5 + seed * 0.5);
+  cfg.complexity = floor(lerp(1, 16, seed));
+  cfg.noiseScale = lerp(0.001, 0.018, 1 - yNorm);
+  cfg.decay = floor(lerp(2, 45, xNorm));
+  cfg.symmetry = floor(lerp(1, 8, yNorm * 0.7 + seed * 0.3));
+  cfg.gx = lerp(-0.3, 0.3, xNorm) * (seed > 0.5 ? 1 : -1);
+  cfg.gy = lerp(-0.3, 0.3, yNorm) * (seed > 0.3 ? 1 : -1);
+  cfg.blendMode = floor(lerp(0, 5.99, seed));
+
+  cfg.fx.glow = seed > 0.5;
+  cfg.fx.mirror = xNorm > 0.6;
+  cfg.fx.pulse = yNorm > 0.6;
+  cfg.fx.chromatic = seed > 0.7;
+  cfg.fx.invert = false;
+
+  syncUIFromCfg();
+}
+
+function hoverTweakParams(xNorm, yNorm) {
+  // randomize within ±offset% of current values — mode, shape, palette, fx, blendMode stay
+  let pct = cfg.offset / 100;
+  let seed = noise(xNorm * 5, yNorm * 5, millis() * 0.00015);
+  // jitter produces -1..1 range, scaled by offset
+  let j1 = (seed * 2 - 1) * pct;
+  let j2 = (noise(xNorm * 7 + 50, yNorm * 7, millis() * 0.0002) * 2 - 1) * pct;
+  let j3 = (noise(xNorm * 3, yNorm * 9 + 30, millis() * 0.00018) * 2 - 1) * pct;
+
+  cfg.speed = constrain(cfg.speed + cfg.speed * j1, 0.1, 5);
+  cfg.size = constrain(cfg.size + cfg.size * j2, 1, 100);
+  cfg.complexity = constrain(floor(cfg.complexity + cfg.complexity * j3), 1, 20);
+  cfg.noiseScale = constrain(cfg.noiseScale + cfg.noiseScale * j1 * 0.8, 0.001, 0.02);
+  cfg.decay = constrain(floor(cfg.decay + cfg.decay * j2 * 0.6), 0, 50);
+  cfg.symmetry = constrain(floor(cfg.symmetry + cfg.symmetry * j3 * 0.5), 1, 12);
+  cfg.gx = constrain(cfg.gx + j1 * 0.3, -1, 1);
+  cfg.gy = constrain(cfg.gy + j2 * 0.3, -1, 1);
+
+  syncUIFromCfg();
+}
+
+function syncUIFromCfg() {
+  setActiveBtn('mode-btns', cfg.mode);
+  setActiveBtn('shape-btns', cfg.shape);
+  document.getElementById('palette-sel').value = cfg.palette;
+  document.getElementById('blend-sel').value = cfg.blendMode;
+
+  const sliderMap = { speed:'speed', count:'count', size:'size', complexity:'complexity', noise:'noiseScale', decay:'decay', symmetry:'symmetry', gx:'gx', gy:'gy' };
+  Object.entries(sliderMap).forEach(([id, key]) => {
+    let el = document.getElementById('r-' + id);
+    if (el) el.value = cfg[key];
+    let valEl = document.getElementById('v-' + id);
+    if (valEl) valEl.textContent = parseFloat(cfg[key]).toFixed(key === 'noiseScale' ? 3 : (key === 'gx' || key === 'gy' ? 2 : 0));
+  });
+
+  Object.keys(cfg.fx).forEach(k => {
+    let el = document.getElementById('fx-' + k);
+    if (el) el.classList.toggle('active', cfg.fx[k]);
+  });
+}
+
+function mouseWheel(event) {
+  cfg.zoom = constrain(cfg.zoom - event.delta * 0.001, 0.3, 4);
+  return false;
+}
+
+function keyPressed() {
+  if (key === 'h' || key === 'H') document.getElementById('panel').classList.toggle('hidden');
+  if (key === ' ') { pauseToggle(); return false; }
+  if (key === 'r' || key === 'R') randomize();
+  if (key === 'c' || key === 'C') clearCanvas();
+  if (key === 's' || key === 'S') { saveCanvas('abstract_' + Date.now(), 'png'); return false; }
+  if (key === 'm' || key === 'M') toggleHoverRandomize();
+  if (key === 'n' || key === 'N') toggleHoverTweak();
+  if (key === 'b' || key === 'B') toggleBeatReactive();
+  if (key === 'a' || key === 'A') toggleMouseAttract();
+  if (key === 'f' || key === 'F') saveFavorite();
+  if (key === 'z' || key === 'Z') toggleZenMode();
+  // 1-9 quick-load favorites
+  if (key >= '1' && key <= '9') {
+    let idx = parseInt(key) - 1;
+    if (idx < favorites.length) loadFavorite(favorites[idx].id);
+  }
+  // Escape exits zen
+  if (keyCode === ESCAPE && zenMode) { toggleZenMode(); return false; }
+}
+
+// === UI ===
+function buildUI() {
+  let modeDiv = document.getElementById('mode-btns');
+  MODES.forEach(m => {
+    let b = document.createElement('button');
+    b.className = 'btn' + (m === cfg.mode ? ' active' : '');
+    b.textContent = m;
+    b.onclick = () => { cfg.mode = m; setActiveBtn('mode-btns', m); if(m!=='attractor') attractors = [createVector(width/2,height/2)]; };
+    modeDiv.appendChild(b);
+  });
+
+  let shapeDiv = document.getElementById('shape-btns');
+  SHAPES.forEach(s => {
+    let b = document.createElement('button');
+    b.className = 'btn' + (s === cfg.shape ? ' active' : '');
+    b.textContent = s;
+    b.onclick = () => { cfg.shape = s; setActiveBtn('shape-btns', s); };
+    shapeDiv.appendChild(b);
+  });
+
+  let palSel = document.getElementById('palette-sel');
+  Object.keys(PALETTES).forEach(p => {
+    let o = document.createElement('option');
+    o.value = p; o.textContent = p;
+    if (p === cfg.palette) o.selected = true;
+    palSel.appendChild(o);
+  });
+  palSel.onchange = () => { cfg.palette = palSel.value; };
+
+  // sliders
+  const sliders = [
+    ['speed', 'speed'], ['count', 'count'], ['size', 'size'],
+    ['complexity', 'complexity'], ['noise', 'noiseScale'],
+    ['decay', 'decay'], ['symmetry', 'symmetry'], ['gx', 'gx'], ['gy', 'gy'],
+  ];
+  sliders.forEach(([id, key]) => {
+    let el = document.getElementById('r-' + id);
+    let valEl = document.getElementById('v-' + id);
+    el.oninput = () => {
+      cfg[key] = parseFloat(el.value);
+      valEl.textContent = parseFloat(el.value).toFixed(key === 'noiseScale' ? 3 : (key === 'gx' || key === 'gy' ? 2 : 0));
+      if (key === 'count') {
+        while (particles.length < cfg.count) particles.push(new Particle());
+        while (particles.length > cfg.count) particles.pop();
+      }
+    };
+  });
+
+  document.getElementById('blend-sel').onchange = function() { cfg.blendMode = parseInt(this.value); };
+
+  // hover speed slider
+  let hoverSpeedEl = document.getElementById('r-hoverspeed');
+  let hoverSpeedVal = document.getElementById('v-hoverspeed');
+  hoverSpeedEl.oninput = () => {
+    hoverCooldown = parseInt(hoverSpeedEl.value);
+    hoverSpeedVal.textContent = hoverSpeedEl.value;
+  };
+
+  // attract strength slider
+  let attractEl = document.getElementById('r-attractstr');
+  let attractVal = document.getElementById('v-attractstr');
+  attractEl.oninput = () => {
+    cfg.attractStrength = parseFloat(attractEl.value);
+    attractVal.textContent = parseFloat(attractEl.value).toFixed(2);
+  };
+
+  // offset slider
+  let offsetEl = document.getElementById('r-offset');
+  let offsetVal = document.getElementById('v-offset');
+  offsetEl.oninput = () => {
+    cfg.offset = parseInt(offsetEl.value);
+    offsetVal.textContent = offsetEl.value;
+  };
+}
+
+function setActiveBtn(containerId, val) {
+  let btns = document.getElementById(containerId).querySelectorAll('.btn');
+  btns.forEach(b => b.classList.toggle('active', b.textContent === val));
+}
+
+function toggleFx(name) {
+  cfg.fx[name] = !cfg.fx[name];
+  document.getElementById('fx-' + name).classList.toggle('active');
+}
+
+function clearCanvas() {
+  background(cfg.fx.invert ? 240 : 10, 10, 15);
+  resetParticles();
+  t = 0;
+}
+
+function pauseToggle() { cfg.paused = !cfg.paused; }
+
+function randomize() {
+  let modeIdx = floor(random(MODES.length));
+  let shapeIdx = floor(random(SHAPES.length));
+  let palKeys = Object.keys(PALETTES).filter(k => k !== 'Custom');
+  let palIdx = floor(random(palKeys.length));
+
+  cfg.mode = MODES[modeIdx];
+  cfg.shape = SHAPES[shapeIdx];
+  cfg.palette = palKeys[palIdx];
+  cfg.speed = random(0.3, 3);
+  cfg.count = floor(random(30, 300));
+  cfg.size = random(3, 60);
+  cfg.complexity = floor(random(1, 15));
+  cfg.noiseScale = random(0.001, 0.015);
+  cfg.decay = floor(random(0, 40));
+  cfg.symmetry = floor(random(1, 8));
+  cfg.gx = random(-0.3, 0.3);
+  cfg.gy = random(-0.3, 0.3);
+  cfg.blendMode = floor(random(6));
+
+  // random fx
+  Object.keys(cfg.fx).forEach(k => {
+    cfg.fx[k] = random() > 0.6;
+    document.getElementById('fx-' + k).classList.toggle('active', cfg.fx[k]);
+  });
+
+  // update UI
+  setActiveBtn('mode-btns', cfg.mode);
+  setActiveBtn('shape-btns', cfg.shape);
+  document.getElementById('palette-sel').value = cfg.palette;
+  document.getElementById('blend-sel').value = cfg.blendMode;
+
+  const map2 = { speed:'speed', count:'count', size:'size', complexity:'complexity', noise:'noiseScale', decay:'decay', symmetry:'symmetry', gx:'gx', gy:'gy' };
+  Object.entries(map2).forEach(([id, key]) => {
+    let el = document.getElementById('r-' + id);
+    el.value = cfg[key];
+    let valEl = document.getElementById('v-' + id);
+    valEl.textContent = parseFloat(cfg[key]).toFixed(key === 'noiseScale' ? 3 : (key === 'gx' || key === 'gy' ? 2 : 0));
+  });
+
+  resetParticles();
+  clearCanvas();
+}
+
+function toggleHoverRandomize() {
+  cfg.hoverRandomize = !cfg.hoverRandomize;
+  document.getElementById('fx-hoverrand').classList.toggle('active', cfg.hoverRandomize);
+  if (cfg.hoverRandomize) {
+    cfg.hoverTweak = false; cfg.beatReactive = false;
+    document.getElementById('fx-hovertweak').classList.remove('active');
+    document.getElementById('fx-beatreactive').classList.remove('active');
+    lastMouseX = -1; lastMouseY = -1;
+  }
+}
+
+function toggleHoverTweak() {
+  cfg.hoverTweak = !cfg.hoverTweak;
+  document.getElementById('fx-hovertweak').classList.toggle('active', cfg.hoverTweak);
+  if (cfg.hoverTweak) {
+    cfg.hoverRandomize = false; cfg.beatReactive = false;
+    document.getElementById('fx-hoverrand').classList.remove('active');
+    document.getElementById('fx-beatreactive').classList.remove('active');
+    lastMouseX = -1; lastMouseY = -1;
+  }
+}
+
+function toggleMouseAttract() {
+  cfg.mouseAttract = !cfg.mouseAttract;
+  document.getElementById('fx-mouseattract').classList.toggle('active', cfg.mouseAttract);
+}
+
+function toggleBeatReactive() {
+  if (!cfg.beatReactive) {
+    // request mic
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      timeData = new Uint8Array(analyser.fftSize);
+
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        micStream = stream;
+        let src = audioContext.createMediaStreamSource(stream);
+        src.connect(analyser);
+        cfg.beatReactive = true;
+        cfg.hoverRandomize = false; cfg.hoverTweak = false;
+        document.getElementById('fx-beatreactive').classList.add('active');
+        document.getElementById('fx-hoverrand').classList.remove('active');
+        document.getElementById('fx-hovertweak').classList.remove('active');
+      }).catch(() => {
+        audioContext = null; analyser = null;
+      });
+    } else {
+      cfg.beatReactive = true;
+      cfg.hoverRandomize = false; cfg.hoverTweak = false;
+      document.getElementById('fx-beatreactive').classList.add('active');
+      document.getElementById('fx-hoverrand').classList.remove('active');
+      document.getElementById('fx-hovertweak').classList.remove('active');
+      if (audioContext.state === 'suspended') audioContext.resume();
+    }
+  } else {
+    cfg.beatReactive = false;
+    document.getElementById('fx-beatreactive').classList.remove('active');
+  }
+}
+
+function toggleRecord() {
+  if (!cfg.recording) {
+    let stream = document.querySelector('canvas').captureStream(30);
+    recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      let blob = new Blob(chunks, { type: 'video/webm' });
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'abstract_' + Date.now() + '.webm';
+      a.click();
+    };
+    recorder.start();
+    cfg.recording = true;
+  } else {
+    recorder.stop();
+    cfg.recording = false;
+  }
+}
+
+// === FAVORITES ===
+function snapshotCfg() {
+  return {
+    mode: cfg.mode, shape: cfg.shape, palette: cfg.palette,
+    speed: cfg.speed, count: cfg.count, size: cfg.size,
+    complexity: cfg.complexity, noiseScale: cfg.noiseScale,
+    decay: cfg.decay, symmetry: cfg.symmetry,
+    gx: cfg.gx, gy: cfg.gy, blendMode: cfg.blendMode,
+    fx: Object.assign({}, cfg.fx),
+  };
+}
+
+function applyCfgSnapshot(snap) {
+  cfg.mode = snap.mode; cfg.shape = snap.shape; cfg.palette = snap.palette;
+  cfg.speed = snap.speed; cfg.count = snap.count; cfg.size = snap.size;
+  cfg.complexity = snap.complexity; cfg.noiseScale = snap.noiseScale;
+  cfg.decay = snap.decay; cfg.symmetry = snap.symmetry;
+  cfg.gx = snap.gx; cfg.gy = snap.gy; cfg.blendMode = snap.blendMode;
+  Object.assign(cfg.fx, snap.fx);
+
+  // resize particle pool
+  while (particles.length < cfg.count) particles.push(new Particle());
+  while (particles.length > cfg.count) particles.pop();
+
+  syncUIFromCfg();
+}
+
+function saveFavorite() {
+  let snap = snapshotCfg();
+  let idx = favorites.length + 1;
+  let name = snap.mode + ' / ' + snap.shape + ' #' + idx;
+  favorites.push({ name, snap, id: Date.now() });
+  persistFavorites();
+  renderFavorites();
+}
+
+function loadFavorite(id) {
+  let fav = favorites.find(f => f.id === id);
+  if (fav) applyCfgSnapshot(fav.snap);
+}
+
+function deleteFavorite(id) {
+  favorites = favorites.filter(f => f.id !== id);
+  persistFavorites();
+  renderFavorites();
+}
+
+function renderFavorites() {
+  let list = document.getElementById('fav-list');
+  list.innerHTML = '';
+  favorites.forEach(f => {
+    let div = document.createElement('div');
+    div.className = 'fav-item';
+    div.innerHTML =
+      '<span class="fav-name">' + f.name + '</span>' +
+      '<span class="fav-tags">' + f.snap.mode + '</span>' +
+      '<button class="fav-del" data-id="' + f.id + '">x</button>';
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('fav-del')) return;
+      loadFavorite(f.id);
+    });
+    div.querySelector('.fav-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteFavorite(f.id);
+    });
+    list.appendChild(div);
+  });
+}
+
+function persistFavorites() {
+  try { localStorage.setItem('p5studio_favs', JSON.stringify(favorites)); } catch(e) {}
+}
+
+function loadPersistedFavorites() {
+  try {
+    let data = localStorage.getItem('p5studio_favs');
+    if (data) { favorites = JSON.parse(data); renderFavorites(); }
+  } catch(e) {}
+}
+
+// === ZEN MODE ===
+function toggleZenMode() {
+  zenMode = !zenMode;
+  document.body.classList.toggle('zen', zenMode);
+  if (zenMode && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else if (!zenMode && document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+// exit zen on Escape or fullscreen exit
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && zenMode) {
+    zenMode = false;
+    document.body.classList.remove('zen');
+  }
+});
+</script>
+</body>
+</html>
